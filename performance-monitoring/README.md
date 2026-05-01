@@ -4,7 +4,7 @@ Small browser-console utilities for inspecting performance and monitoring behavi
 
 ## SPA Navigation Monitor
 
-`spa-navigation.ts` observes Chrome's experimental Soft Navigation API and prints a `console.table` of detected SPA navigations. It is intended for debugging single-page apps where client-side route changes update the URL and page content without a full document load.
+`spa-navigation.js` observes Chrome's experimental Soft Navigation API and prints a `console.table` of detected SPA navigations. It is intended for debugging single-page apps where client-side route changes update the URL and page content without a full document load.
 
 Source reference: [Experimenting with measuring soft navigations](https://developer.chrome.com/docs/web-platform/soft-navigations-experiment), Chrome for Developers.
 
@@ -41,7 +41,7 @@ Chrome's documentation notes that `interaction-contentful-paint` entries can som
 
 ### Usage
 
-Open your SPA in Chrome with the Soft Navigation API enabled, then compile or transpile `spa-navigation.ts` and paste the output into DevTools Console.
+Open your SPA in Chrome with the Soft Navigation API enabled, then paste the contents of `spa-navigation.js` into DevTools Console.
 
 Navigate around the app. The console table refreshes as Chrome detects soft navigations and matching interaction contentful paint entries.
 

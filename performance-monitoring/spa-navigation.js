@@ -1,64 +1,3 @@
-type MetricNumber = number | null;
-
-interface InteractionContentfulPaintEntry extends PerformanceEntry {
-  renderTime?: number;
-  loadTime?: number;
-  size?: number;
-  id?: string;
-  url?: string;
-  navigationId?: number;
-  interactionId?: number;
-  element?: Element;
-}
-
-interface SoftNavigationEntry extends PerformanceEntry {
-  navigationId: number;
-  interactionId?: number;
-  paintTime?: number;
-  presentationTime?: number;
-  largestInteractionContentfulPaint?: InteractionContentfulPaintEntry;
-}
-
-interface SoftNavigationMetricRow {
-  navigationId: number;
-  url: string | null;
-  entryType: string | null;
-  startTime: MetricNumber;
-  duration: MetricNumber;
-  interactionId: number | null;
-  paintTime: MetricNumber;
-  presentationTime: MetricNumber;
-  fcpFromSoftNavStart: MetricNumber;
-  presentationFromSoftNavStart: MetricNumber;
-  lcpFromSoftNavStart: MetricNumber;
-  detectedAt: MetricNumber;
-  detectionDelay: MetricNumber;
-
-  licpStartTime: MetricNumber;
-  licpDuration: MetricNumber;
-  licpRenderTime: MetricNumber;
-  licpLoadTime: MetricNumber;
-  licpSize: number | null;
-  licpId: string | null;
-  licpUrl: string | null;
-  licpNavigationId: number | null;
-  licpInteractionId: number | null;
-  licpElement: string | null;
-}
-
-interface SoftNavMetricsHandle {
-  rows: Map<number, SoftNavigationMetricRow>;
-  print: () => void;
-  stop: () => void;
-}
-
-declare global {
-  interface Window {
-    SoftNavigationEntry?: unknown;
-    __softNavMetrics?: SoftNavMetricsHandle;
-  }
-}
-
 (() => {
   const supported =
     PerformanceObserver.supportedEntryTypes?.includes("soft-navigation") ||
@@ -71,14 +10,11 @@ declare global {
     return;
   }
 
-  const rows = new Map<number, SoftNavigationMetricRow>();
+  const rows = new Map();
 
-  const n = (value: unknown): MetricNumber =>
-    typeof value === "number" && Number.isFinite(value)
-      ? Math.round(value * 10) / 10
-      : null;
+  const n = (v) => (Number.isFinite(v) ? Math.round(v * 10) / 10 : null);
 
-  const getRow = (navigationId: number): SoftNavigationMetricRow => {
+  const getRow = (navigationId) => {
     if (!rows.has(navigationId)) {
       rows.set(navigationId, {
         navigationId,
@@ -108,13 +44,10 @@ declare global {
       });
     }
 
-    return rows.get(navigationId)!;
+    return rows.get(navigationId);
   };
 
-  const applyLICP = (
-    row: SoftNavigationMetricRow,
-    entry?: InteractionContentfulPaintEntry
-  ) => {
+  const applyLICP = (row, entry) => {
     if (!entry || !Number.isFinite(row.startTime)) return;
 
     const lcpRelative = entry.startTime - row.startTime;
@@ -141,40 +74,40 @@ declare global {
     console.table(
       [...rows.values()]
         .sort((a, b) => (a.startTime ?? 0) - (b.startTime ?? 0))
-        .map((row, index) => ({
-          "#": index + 1,
-          URL: row.url,
-          entryType: row.entryType,
-          navigationId: row.navigationId,
-          interactionId: row.interactionId,
+        .map((r, i) => ({
+          "#": i + 1,
+          URL: r.url,
+          entryType: r.entryType,
+          navigationId: r.navigationId,
+          interactionId: r.interactionId,
 
-          "startTime ms": n(row.startTime),
-          "duration ms": n(row.duration),
-          "detectedAt ms": n(row.detectedAt),
-          "detectionDelay ms": n(row.detectionDelay),
+          "startTime ms": n(r.startTime),
+          "duration ms": n(r.duration),
+          "detectedAt ms": n(r.detectedAt),
+          "detectionDelay ms": n(r.detectionDelay),
 
-          "paintTime ms": n(row.paintTime),
-          "presentationTime ms": n(row.presentationTime),
-          "FCP from nav start ms": n(row.fcpFromSoftNavStart),
-          "presentation from nav start ms": n(row.presentationFromSoftNavStart),
-          "LCP from nav start ms": n(row.lcpFromSoftNavStart),
+          "paintTime ms": n(r.paintTime),
+          "presentationTime ms": n(r.presentationTime),
+          "FCP from nav start ms": n(r.fcpFromSoftNavStart),
+          "presentation from nav start ms": n(r.presentationFromSoftNavStart),
+          "LCP from nav start ms": n(r.lcpFromSoftNavStart),
 
-          "LICP startTime ms": n(row.licpStartTime),
-          "LICP duration ms": n(row.licpDuration),
-          "LICP renderTime ms": n(row.licpRenderTime),
-          "LICP loadTime ms": n(row.licpLoadTime),
-          "LICP size": row.licpSize,
-          "LICP id": row.licpId,
-          "LICP url": row.licpUrl,
-          "LICP navigationId": row.licpNavigationId,
-          "LICP interactionId": row.licpInteractionId,
-          "LICP element": row.licpElement,
+          "LICP startTime ms": n(r.licpStartTime),
+          "LICP duration ms": n(r.licpDuration),
+          "LICP renderTime ms": n(r.licpRenderTime),
+          "LICP loadTime ms": n(r.licpLoadTime),
+          "LICP size": r.licpSize,
+          "LICP id": r.licpId,
+          "LICP url": r.licpUrl,
+          "LICP navigationId": r.licpNavigationId,
+          "LICP interactionId": r.licpInteractionId,
+          "LICP element": r.licpElement,
         }))
     );
   };
 
   const softNavObserver = new PerformanceObserver((list) => {
-    for (const entry of list.getEntries() as SoftNavigationEntry[]) {
+    for (const entry of list.getEntries()) {
       const row = getRow(entry.navigationId);
 
       row.url = entry.name;
@@ -182,9 +115,9 @@ declare global {
       row.startTime = entry.startTime;
       row.duration = entry.duration;
       row.navigationId = entry.navigationId;
-      row.interactionId = entry.interactionId ?? null;
-      row.paintTime = entry.paintTime ?? null;
-      row.presentationTime = entry.presentationTime ?? null;
+      row.interactionId = entry.interactionId;
+      row.paintTime = entry.paintTime;
+      row.presentationTime = entry.presentationTime;
       row.detectedAt = performance.now();
       row.detectionDelay = row.detectedAt - entry.startTime;
 
@@ -203,7 +136,7 @@ declare global {
   });
 
   const icpObserver = new PerformanceObserver((list) => {
-    for (const entry of list.getEntries() as InteractionContentfulPaintEntry[]) {
+    for (const entry of list.getEntries()) {
       for (const row of rows.values()) {
         if (row.interactionId && entry.interactionId === row.interactionId) {
           applyLICP(row, entry);
@@ -237,5 +170,3 @@ declare global {
 
   console.log("Soft navigation monitoring started.");
 })();
-
-export {};
