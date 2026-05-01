@@ -21,3 +21,5 @@ lsof -nP -iTCP -sTCP:LISTEN
 The refresh button scans live while the API server is running. Each row also includes a stop button that confirms in the browser, verifies the PID still owns that port, then sends `SIGTERM` to that process.
 
 Use the `Stop dashboard` button to shut down both the Vite frontend and the API server together.
+
+The `Ask Codex` widget uses the official `@openai/codex-sdk` package from the local API server with read-only sandboxing and approvals disabled for that turn.

@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { Codex } from "@openai/codex-sdk";
 import { createServer } from "node:http";
 import { resolve } from "node:path";
 import { dirname } from "node:path";
@@ -7,6 +7,11 @@ import { scanPorts } from "./scan-ports.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const port = Number(process.env.PORT ?? 4173);
+const codex = new Codex({
+  config: {
+    approval_policy: "never",
+  },
+});
 
 const readJson = async (req) => {
   const chunks = [];
@@ -38,59 +43,26 @@ const askCodex = async (question) => {
     question,
   ].join("\n");
 
-  return new Promise((resolveAnswer, reject) => {
-    const child = spawn(
-      "codex",
-      [
-      "exec",
-      "-c",
-      "approval_policy=\"never\"",
-      "--sandbox",
-      "read-only",
-      "--ephemeral",
-      "--skip-git-repo-check",
-      "-C",
-      root,
-      prompt,
-    ],
-      {
-        stdio: ["pipe", "pipe", "pipe"],
-      }
-    );
+  const controller = new AbortController();
+  const timeout = setTimeout(() => {
+    controller.abort();
+  }, 45000);
 
-    let stdout = "";
-    let stderr = "";
-    const timeout = setTimeout(() => {
-      child.kill("SIGTERM");
-      reject(new Error("Codex took too long to answer."));
-    }, 45000);
-
-    child.stdout.on("data", (chunk) => {
-      stdout += chunk;
+  try {
+    const thread = codex.startThread({
+      approvalPolicy: "never",
+      sandboxMode: "read-only",
+      skipGitRepoCheck: true,
+      workingDirectory: root,
+    });
+    const turn = await thread.run(prompt, {
+      signal: controller.signal,
     });
 
-    child.stderr.on("data", (chunk) => {
-      stderr += chunk;
-    });
-
-    child.on("error", (err) => {
-      clearTimeout(timeout);
-      reject(err);
-    });
-
-    child.on("close", (code) => {
-      clearTimeout(timeout);
-      const output = (stdout || stderr).trim();
-
-      if (code === 0) {
-        resolveAnswer(output);
-      } else {
-        reject(new Error(output || `Codex exited with status ${code}.`));
-      }
-    });
-
-    child.stdin.end();
-  });
+    return turn.finalResponse.trim();
+  } finally {
+    clearTimeout(timeout);
+  }
 };
 
 const stopDashboard = async () => {
