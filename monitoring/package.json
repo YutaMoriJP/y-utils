@@ -1,0 +1,26 @@
+{
+  "name": "monitoring",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npm run scan && concurrently \"vite --host 127.0.0.1 --port 4173\" \"npm run api\"",
+    "scan": "node scripts/scan-ports.mjs",
+    "api": "PORT=4174 node scripts/serve.mjs",
+    "build": "npm run scan && tsc --noEmit && vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 4173"
+  },
+  "dependencies": {
+    "@openai/codex-sdk": "^0.128.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "vite": "^7.1.12"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.12",
+    "@types/react-dom": "^19.1.9",
+    "@vitejs/plugin-react": "^5.0.4",
+    "concurrently": "^9.2.1",
+    "typescript": "^5.9.3"
+  }
+}
