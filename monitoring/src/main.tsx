@@ -32,9 +32,9 @@ const stopPort = async (item: PortItem) => {
   const response = await fetch("/stop-port", {
     method: "POST",
     headers: {
-      "content-type": "application/json",
+      "content-type": "application/json"
     },
-    body: JSON.stringify({ pid: item.pid, port: item.port }),
+    body: JSON.stringify({ pid: item.pid, port: item.port })
   });
   const payload = await response.json();
 
@@ -45,26 +45,49 @@ const stopPort = async (item: PortItem) => {
   return payload;
 };
 
-const askCodex = async (question: string): Promise<string> => {
+const askCodex = async (question: string, onStateUpdate: (result: string) => void) => {
   const response = await fetch("/ask-codex", {
     method: "POST",
     headers: {
-      "content-type": "application/json",
+      "content-type": "application/json"
     },
-    body: JSON.stringify({ question }),
+    body: JSON.stringify({ question })
   });
-  const payload = await response.json();
 
-  if (!response.ok || !payload.ok) {
-    throw new Error(payload.error ?? "Codex could not answer that.");
+  if (response.body) {
+    const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+    let buffer = "";
+
+    while (true) {
+      const result = await reader.read();
+      if (result.done) {
+        break;
+      }
+
+      buffer += result.value;
+
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+
+        const parsed = JSON.parse(line);
+        if (parsed.type === "answer_delta") {
+          onStateUpdate(parsed.delta);
+        }
+
+        if (parsed.type === "answer") {
+          onStateUpdate(parsed.answer);
+        }
+      }
+    }
   }
-
-  return payload.answer;
 };
 
 const stopDashboard = async () => {
   const response = await fetch("/stop-dashboard", {
-    method: "POST",
+    method: "POST"
   });
   const payload = await response.json();
 
@@ -137,7 +160,11 @@ function App() {
     setAnswer("");
 
     try {
-      setAnswer(await askCodex(trimmed));
+      const setState = (result: string) => {
+        setAnswer((answer) => answer + "\n" + result);
+      };
+
+      await askCodex(trimmed, setState);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -277,10 +304,22 @@ function PortRow({ item, isStopping, onStop }: { item: PortItem; isStopping: boo
         <span>{item.protocols.join(" / ")}</span>
       </div>
       <div className="actions">
-        <a className="openLink" href={localUrl} target="_blank" rel="noreferrer" aria-label={`Open localhost port ${item.port}`}>
+        <a
+          className="openLink"
+          href={localUrl}
+          target="_blank"
+          rel="noreferrer"
+          aria-label={`Open localhost port ${item.port}`}
+        >
           Open
         </a>
-        <button className="stopButton" type="button" onClick={onStop} disabled={isStopping} aria-label={`Stop ${item.command} on port ${item.port}`}>
+        <button
+          className="stopButton"
+          type="button"
+          onClick={onStop}
+          disabled={isStopping}
+          aria-label={`Stop ${item.command} on port ${item.port}`}
+        >
           {isStopping ? "Stopping" : "Stop"}
         </button>
       </div>

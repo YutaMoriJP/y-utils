@@ -9,8 +9,8 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const port = Number(process.env.PORT ?? 4173);
 const codex = new Codex({
   config: {
-    approval_policy: "never",
-  },
+    approval_policy: "never"
+  }
 });
 
 const readJson = async (req) => {
@@ -29,38 +29,77 @@ const sendJson = (res, status, payload) => {
   res.writeHead(status, {
     "content-length": Buffer.byteLength(body),
     "content-type": "application/json; charset=utf-8",
-    "cache-control": "no-store",
+    "cache-control": "no-store"
   });
   res.end(body);
 };
 
-const askCodex = async (question) => {
+const sendStreamEvent = (res, payload) => {
+  console.log("[sending stream]", payload);
+  res.write(`${JSON.stringify(payload)}\n`);
+};
+
+const streamCodex = async (question, res) => {
   const prompt = [
     "You are answering a question from a tiny local port-monitoring dashboard.",
     "Give a concise, helpful answer.",
     "Do not modify files or start/stop processes.",
     "",
-    question,
+    question
   ].join("\n");
 
   const controller = new AbortController();
   const timeout = setTimeout(() => {
     controller.abort();
   }, 45000);
+  const abort = () => controller.abort();
+
+  res.once("close", abort);
 
   try {
     const thread = codex.startThread({
       approvalPolicy: "never",
       sandboxMode: "read-only",
       skipGitRepoCheck: true,
-      workingDirectory: root,
-    });
-    const turn = await thread.run(prompt, {
-      signal: controller.signal,
+      workingDirectory: root
     });
 
-    return turn.finalResponse.trim();
+    const { events } = await thread.runStreamed(prompt, {
+      signal: controller.signal
+    });
+
+    let answer = "";
+    let usage = null;
+
+    sendStreamEvent(res, { type: "start", ok: true });
+
+    for await (const event of events) {
+      if (event.type === "item.updated" || event.type === "item.completed") {
+        if (event.item.type === "agent_message") {
+          const text = event.item.text ?? "";
+
+          if (text.length > answer.length && text.startsWith(answer)) {
+            sendStreamEvent(res, { type: "answer_delta", delta: text.slice(answer.length) });
+          } else if (text !== answer) {
+            sendStreamEvent(res, { type: "answer", answer: text });
+          }
+
+          answer = text;
+        } else if (event.item.type === "error") {
+          sendStreamEvent(res, { type: "error", error: event.item.message });
+        }
+      } else if (event.type === "turn.completed") {
+        usage = event.usage;
+      } else if (event.type === "turn.failed") {
+        throw new Error(event.error.message);
+      } else if (event.type === "error") {
+        throw new Error(event.message);
+      }
+    }
+
+    sendStreamEvent(res, { type: "done", ok: true, answer: answer.trim(), usage });
   } finally {
+    res.off("close", abort);
     clearTimeout(timeout);
   }
 };
@@ -158,10 +197,20 @@ const server = createServer(async (req, res) => {
         return;
       }
 
-      const answer = await askCodex(trimmed);
-      sendJson(res, 200, { ok: true, answer });
+      res.writeHead(200, {
+        "content-type": "application/x-ndjson; charset=utf-8",
+        "cache-control": "no-store",
+        "x-content-type-options": "nosniff"
+      });
+      await streamCodex(trimmed, res);
+      res.end();
     } catch (err) {
-      sendJson(res, 500, { ok: false, error: err.message });
+      if (res.headersSent) {
+        sendStreamEvent(res, { type: "error", ok: false, error: err.message });
+        res.end();
+      } else {
+        sendJson(res, 500, { ok: false, error: err.message });
+      }
     }
 
     return;
